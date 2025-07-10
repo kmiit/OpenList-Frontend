@@ -25,7 +25,8 @@ import { createStore } from "solid-js/store"
 import { UploadFileProps, StatusBadge } from "./types"
 import { File2Upload, traverseFileTree } from "./util"
 import { SelectWrapper } from "~/components"
-import { getUploads } from "./uploads"
+import { getBestUploadMethod, getUploads } from "./uploads"
+import { shouldUseChunkedUpload } from "./chunked"
 
 const UploadFile = (props: UploadFileProps) => {
   const t = useT()
@@ -112,7 +113,20 @@ const Upload = () => {
     setUpload(path, "status", "uploading")
     const uploadPath = pathJoin(pathname(), path)
     try {
-      const err = await curUploader().upload(
+      // 对大文件使用分片上传，小文件使用当前选择的上传器
+      const uploadMethod = shouldUseChunkedUpload(file)
+        ? getBestUploadMethod(file)
+        : curUploader().upload
+
+      // 如果使用分片上传，在上传开始前显示提示
+      if (shouldUseChunkedUpload(file)) {
+        setUpload(path, "status", "preparing")
+        console.log(
+          `使用分片上传大文件: ${file.name}, 大小: ${file.size} bytes`,
+        )
+      }
+
+      const err = await uploadMethod(
         uploadPath,
         file,
         (key, value) => {
