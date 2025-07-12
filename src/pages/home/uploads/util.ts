@@ -162,7 +162,7 @@ export const calculatesha256 = async (
   }
 }
 
-export const getSettingValue = async (key: string): Promise<void> => {
+export const getSettingValue = async (key: string): Promise<string | null> => {
   const [_, getSetting] = useFetch(
     (): PResp<SettingItem[]> => r.get(`/admin/setting/get?key=${key}`),
   )
