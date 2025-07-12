@@ -1,5 +1,8 @@
 import { UploadFileProps } from "./types"
 import { createMD5, createSHA1, createSHA256 } from "hash-wasm"
+import { useFetch } from "~/hooks"
+import { PResp, SettingItem } from "~/types"
+import { r } from "~/utils"
 
 export const traverseFileTree = async (entry: FileSystemEntry) => {
   let res: File[] = []
@@ -157,4 +160,13 @@ export const calculatesha256 = async (
     console.error("SHA-256计算错误:", error)
     throw error
   }
+}
+
+export const getSettingValue = async (key: string): Promise<void> => {
+  const [_, getSetting] = useFetch(
+    (): PResp<SettingItem[]> => r.get(`/admin/setting/get?key=${key}`),
+  )
+  const resp = await getSetting()
+
+  return JSON.parse(JSON.stringify(resp)).data.value
 }

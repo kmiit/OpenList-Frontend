@@ -2,10 +2,8 @@ import { password } from "~/store"
 import { EmptyResp } from "~/types"
 import { r } from "~/utils"
 import { SetUpload, Upload } from "./types"
-import { calculateHash, calculatesha256 } from "./util"
+import { calculateHash, calculatesha256, getSettingValue } from "./util"
 
-// 默认分片大小为5MB
-const DEFAULT_CHUNK_SIZE = 100 * 1024 * 1024
 // 文件大小超过此值时使用分片上传
 const CHUNKED_UPLOAD_THRESHOLD = 10 * 1024 * 1024
 
@@ -128,11 +126,13 @@ async function initChunkedUpload(
   overwrite: boolean,
   fileHash: string | null,
 ) {
+  const sliceSizeSetting = await getSettingValue("slice_transmission_size")
+  const sliceSize = parseInt(sliceSizeSetting) * 1024 * 1024
   return await r.post("/fs/chunk/init", null, {
     headers: {
       "File-Path": encodeURIComponent(uploadPath),
       "File-Size": file.size.toString(),
-      "Chunk-Size": DEFAULT_CHUNK_SIZE.toString(),
+      "Chunk-Size": sliceSize,
       Password: password(),
       Overwrite: overwrite.toString(),
       "File-Hash": fileHash || "",
