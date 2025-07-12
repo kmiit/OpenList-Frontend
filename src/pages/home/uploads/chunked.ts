@@ -66,51 +66,78 @@ export const ChunkedUpload: Upload = async (
     // 开始上传分片
     setUpload("status", "uploading")
     let oldTimestamp = new Date().valueOf()
-    let totalUploaded = 0
+    let lastTotalBytes = 0 // 记录上次统计时的总字节数
+    const chunkProgress: Record<number, number> = {} // 记录每个分片的上传进度
 
-    // 逐个上传分片
+    // 创建并行上传任务
+    const uploadTasks: Array<() => Promise<void>> = []
+
     for (let i = 0; i < totalChunks; i++) {
-      // 计算当前分片的范围
-      const start = i * chunkSize
+      const chunkIndex = i
+      const start = chunkIndex * chunkSize
       const end = Math.min(start + chunkSize, file.size)
       const chunk = file.slice(start, end)
 
-      // 上传分片，带进度回调
-      const chunkResp = await uploadChunk(
-        chunkInfo.upload_id,
-        i,
-        chunk,
-        (progressEvent: AxiosProgressEvent) => {
-          // 计算总体进度：已完成的分片 + 当前分片的进度
-          const completedSize = totalUploaded
-          const currentChunkProgress = progressEvent.loaded || 0
-          const totalProgress =
-            (completedSize + currentChunkProgress) / file.size
-          const progressPercent = Math.min(Math.floor(totalProgress * 100), 99) // 最多到99%，完成时才到100%
+      uploadTasks.push(async () => {
+        const chunkResp = await uploadChunk(
+          chunkInfo.upload_id,
+          chunkIndex,
+          chunk,
+          (progressEvent: AxiosProgressEvent) => {
+            // 更新当前分片的进度
+            chunkProgress[chunkIndex] = progressEvent.loaded || 0
 
-          setUpload("progress", progressPercent)
+            // 计算总体进度：所有分片的进度之和
+            const totalProgressBytes = Object.values(chunkProgress).reduce(
+              (sum, progress) => sum + progress,
+              0,
+            )
+            const totalProgress = totalProgressBytes / file.size
+            const progressPercent = Math.min(
+              Math.floor(totalProgress * 100),
+              99,
+            ) // 最多到99%，完成时才到100%
 
-          // 计算实时速度
-          const timestamp = new Date().valueOf()
-          const duration = (timestamp - oldTimestamp) / 1000
+            setUpload("progress", progressPercent)
 
-          if (duration > 0.5) {
-            // 每0.5秒更新一次速度
-            const speed = currentChunkProgress / duration
-            setUpload("speed", speed)
-            oldTimestamp = timestamp
-          }
-        },
-      )
+            // 计算实时速度 - 基于总字节数的增量
+            const timestamp = new Date().valueOf()
+            const duration = (timestamp - oldTimestamp) / 1000
 
-      if (chunkResp.code !== 200) {
-        // 如果上传失败，尝试中止上传
-        await abortChunkedUpload(chunkInfo.upload_id)
-        return new Error(`Failed to upload chunk ${i}: ${chunkResp.message}`)
-      }
+            if (duration > 0.5) {
+              // 计算这段时间内的字节增量
+              const bytesIncrement = totalProgressBytes - lastTotalBytes
+              const speed = bytesIncrement / duration
 
-      // 更新已上传的总大小
-      totalUploaded += chunk.size
+              setUpload("speed", speed)
+              oldTimestamp = timestamp
+              lastTotalBytes = totalProgressBytes
+            }
+          },
+        )
+
+        if (chunkResp.code !== 200) {
+          throw new Error(
+            `Failed to upload chunk ${chunkIndex}: ${chunkResp.message}`,
+          )
+        }
+
+        // 标记分片完成
+        chunkProgress[chunkIndex] = chunk.size
+      })
+    }
+
+    // 使用并发池执行上传任务
+    try {
+      let transmission_count = await getSettingValue("slice_transmission_count")
+      const trans_count = transmission_count
+        ? parseInt(transmission_count as any)
+        : 3
+      await executeWithConcurrencyLimit(uploadTasks, trans_count)
+    } catch (error) {
+      // 如果上传失败，尝试中止上传
+      await abortChunkedUpload(chunkInfo.upload_id)
+      throw error
     }
 
     // 完成上传
@@ -202,5 +229,67 @@ async function abortChunkedUpload(uploadId: string): Promise<EmptyResp> {
       "Upload-ID": uploadId,
       Password: password(),
     },
+  })
+}
+
+/**
+ * 并发控制执行函数 - 维持固定数量的并发任务
+ * @param tasks 要执行的任务数组
+ * @param concurrencyLimit 并发限制数量
+ */
+async function executeWithConcurrencyLimit<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrencyLimit: number,
+): Promise<T[]> {
+  return new Promise((resolve, reject) => {
+    const results: T[] = new Array(tasks.length)
+    let completed = 0
+    let nextTaskIndex = 0
+    let runningTasks = 0
+    let hasError = false
+
+    const startNextTask = () => {
+      if (hasError || nextTaskIndex >= tasks.length) return
+
+      const taskIndex = nextTaskIndex++
+      runningTasks++
+
+      const task = tasks[taskIndex]
+
+      task()
+        .then((result) => {
+          if (hasError) return
+
+          results[taskIndex] = result
+          completed++
+          runningTasks--
+
+          // 检查是否所有任务都完成了
+          if (completed === tasks.length) {
+            resolve(results)
+            return
+          }
+
+          // 立即启动下一个任务（如果还有待执行的任务）
+          startNextTask()
+        })
+        .catch((error) => {
+          if (!hasError) {
+            hasError = true
+            reject(error)
+          }
+        })
+    }
+
+    // 启动初始的并发任务，数量不超过并发限制和总任务数
+    const initialTasks = Math.min(concurrencyLimit, tasks.length)
+    for (let i = 0; i < initialTasks; i++) {
+      startNextTask()
+    }
+
+    // 如果没有任务需要执行，直接resolve
+    if (tasks.length === 0) {
+      resolve(results)
+    }
   })
 }
