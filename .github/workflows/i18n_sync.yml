@@ -20,7 +20,7 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.24"
 
       - name: Checkout frontend codes
         uses: actions/checkout@v4
@@ -86,7 +86,7 @@ jobs:
         if: steps.verify-changed-files.outputs.changed == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install pnpm
