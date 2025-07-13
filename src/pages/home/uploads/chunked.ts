@@ -37,11 +37,12 @@ export const ChunkedUpload: Upload = async (
     // 初始化分片上传
     setUpload("status", "preparing")
 
-    // 计算文件的哈希值（用于校验）
+    // 计算文件的哈希值（用于断点续传和校验）
     setUpload("status", "hashing")
-    let fileHash = null
+    let fileHash = ""
+    // 对于大文件或启用了rapid模式时，计算文件哈希
     if (rapid || file.size > CHUNKED_UPLOAD_THRESHOLD) {
-      const fileHash = await calculatesha256(file)
+      fileHash = await calculatesha256(file)
       console.log("File SHA256 hash calculated:", fileHash)
     }
 
@@ -63,17 +64,58 @@ export const ChunkedUpload: Upload = async (
     const totalChunks = chunkInfo.total_chunk
     const chunkSize = chunkInfo.chunk_size
 
+    // 直接从初始化响应中获取已上传的分片信息（用于断点续传）
+    const uploadedChunks = new Set<number>()
+    if (
+      initResp.data.uploaded_chunks &&
+      Array.isArray(initResp.data.uploaded_chunks)
+    ) {
+      initResp.data.uploaded_chunks.forEach((chunkIndex: number) => {
+        uploadedChunks.add(chunkIndex)
+      })
+      if (uploadedChunks.size > 0) {
+        console.log(`Found ${uploadedChunks.size} previously uploaded chunks`)
+      }
+    }
+
     // 开始上传分片
     setUpload("status", "uploading")
     let oldTimestamp = new Date().valueOf()
     let lastTotalBytes = 0 // 记录上次统计时的总字节数
     const chunkProgress: Record<number, number> = {} // 记录每个分片的上传进度
 
+    // 计算已经上传的字节数（断点续传）
+    let alreadyUploadedBytes = 0
+    uploadedChunks.forEach((chunkIndex) => {
+      const chunkActualSize =
+        chunkIndex === totalChunks - 1
+          ? file.size - chunkIndex * chunkSize
+          : chunkSize
+
+      alreadyUploadedBytes += chunkActualSize
+      chunkProgress[chunkIndex] = chunkActualSize // 标记为已完成
+    })
+
+    // 更新初始进度
+    if (alreadyUploadedBytes > 0) {
+      const initialProgress = Math.floor(
+        (alreadyUploadedBytes / file.size) * 100,
+      )
+      setUpload("progress", Math.min(initialProgress, 99))
+      lastTotalBytes = alreadyUploadedBytes
+    }
+
     // 创建并行上传任务
     const uploadTasks: Array<() => Promise<void>> = []
 
     for (let i = 0; i < totalChunks; i++) {
       const chunkIndex = i
+
+      // 如果该分片已上传，跳过
+      if (uploadedChunks.has(chunkIndex)) {
+        continue
+      }
+
       const start = chunkIndex * chunkSize
       const end = Math.min(start + chunkSize, file.size)
       const chunk = file.slice(start, end)
@@ -129,11 +171,18 @@ export const ChunkedUpload: Upload = async (
 
     // 使用并发池执行上传任务
     try {
-      let transmission_count = await getSettingValue("slice_transmission_count")
-      const trans_count = transmission_count
-        ? parseInt(transmission_count as any)
-        : 3
-      await executeWithConcurrencyLimit(uploadTasks, trans_count)
+      // 如果所有分片都已上传完成，不需要执行上传任务
+      if (uploadTasks.length > 0) {
+        let transmission_count = await getSettingValue(
+          "slice_transmission_count",
+        )
+        const trans_count = transmission_count
+          ? parseInt(transmission_count as any)
+          : 3
+        await executeWithConcurrencyLimit(uploadTasks, trans_count)
+      } else {
+        console.log("All chunks already uploaded, skipping upload tasks")
+      }
     } catch (error) {
       // 如果上传失败，尝试中止上传
       await abortChunkedUpload(chunkInfo.upload_id)
@@ -215,6 +264,21 @@ async function completeChunkedUpload(
     headers: {
       "Upload-ID": uploadId,
       "As-Task": asTask.toString(),
+      Password: password(),
+    },
+  })
+}
+
+/**
+ * 获取分片上传状态
+ * @param uploadId 上传ID
+ */
+async function getChunkUploadStatus(
+  uploadId: string,
+): Promise<Resp<{ uploaded_chunks: number[] }>> {
+  return await r.get("/fs/chunk/status", {
+    headers: {
+      "Upload-ID": uploadId,
       Password: password(),
     },
   })
