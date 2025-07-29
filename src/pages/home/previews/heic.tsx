@@ -18,29 +18,29 @@ const Preview = () => {
     heicFiles = [objStore.obj]
   }
 
-  // 键盘导航功能：左右箭头切换文件
-  const onKeydown = (e: KeyboardEvent) => {
-    const index = heicFiles.findIndex((f) => f.name === objStore.obj.name)
-    if (e.key === "ArrowLeft" && index > 0) {
-      replace(heicFiles[index - 1].name)
-    } else if (e.key === "ArrowRight" && index < heicFiles.length - 1) {
-      replace(heicFiles[index + 1].name)
-    }
-  }
+  // // 键盘导航功能：左右箭头切换文件
+  // const onKeydown = (e: KeyboardEvent) => {
+  //   const index = heicFiles.findIndex((f) => f.name === objStore.obj.name)
+  //   if (e.key === "ArrowLeft" && index > 0) {
+  //     replace(heicFiles[index - 1].name)
+  //   } else if (e.key === "ArrowRight" && index < heicFiles.length - 1) {
+  //     replace(heicFiles[index + 1].name)
+  //   }
+  // }
 
   let libheif: any
   let decoder: any
-  let canvas: HTMLCanvasElement | null = null
+  let canvas: HTMLCanvasElement | undefined
 
   onMount(() => {
-    window.addEventListener("keydown", onKeydown)
+    // window.addEventListener("keydown", onKeydown)
     initLibheif()
   })
 
   onCleanup(() => {
-    window.removeEventListener("keydown", onKeydown)
+    // window.removeEventListener("keydown", onKeydown)
     if (libheif && decoder) {
-      decoder.free()
+      // decoder.free()
       decoder = null
     }
     libheif = null
@@ -74,21 +74,20 @@ const Preview = () => {
   }
 
   // 加载脚本
-  const loadScript = (src: string, id: string) => {
-    return new Promise<void>((resolve, reject) => {
+  const loadScript = (src: string, id: string) =>
+    new Promise<void>((resolve, reject) => {
       const script = document.createElement("script")
       script.src = src
       script.id = id
       script.onload = () => resolve()
-      script.onerror = () => reject(new Error(`脚本加载失败: ${src}`))
+      script.onerror = () => reject(`脚本加载失败: ${src}`)
       document.head.appendChild(script)
     })
-  }
 
   // 获取WASM文件
   const fetchWasm = async (url: string) => {
     const response = await fetch(url)
-    if (!response.ok) throw new Error(`WASM加载失败: ${url}`)
+    if (!response.ok) throw `WASM加载失败: ${url}`
     return await response.arrayBuffer()
   }
 
@@ -100,13 +99,13 @@ const Preview = () => {
 
       // 获取HEIC文件
       const response = await fetch(url)
-      if (!response.ok) throw new Error("文件获取失败")
+      if (!response.ok) throw "文件获取失败"
       const buffer = await response.arrayBuffer()
 
       // 解码HEIC文件
       const images = decoder.decode(buffer)
       if (!images || images.length === 0) {
-        throw new Error("没有可解码的图像")
+        throw "没有可解码的图像"
       }
 
       // 显示第一张图像

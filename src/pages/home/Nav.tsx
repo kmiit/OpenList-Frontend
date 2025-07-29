@@ -21,7 +21,7 @@ export const Nav = () => {
     const mask: BreadcrumbProps = {
       _after: {
         content: "",
-        bgColor: "$background",
+        backgroundColor: "$background",
         position: "absolute",
         height: "100%",
         width: "99vw",
@@ -68,7 +68,7 @@ export const Nav = () => {
                   wordBreak: "break-all",
                 }}
                 color="unset"
-                _hover={{ bgColor: hoverColor(), color: "unset" }}
+                _hover={{ backgroundColor: hoverColor(), color: "unset" }}
                 _active={{ transform: "scale(.95)", transition: "0.1s" }}
                 cursor="pointer"
                 p="$1"
@@ -78,7 +78,7 @@ export const Nav = () => {
                 href={joinBase(href)}
                 onMouseEnter={() => setPathAs(path)}
               >
-                {text}
+                {text()}
               </BreadcrumbLink>
               <Show when={!isLast()}>
                 <BreadcrumbSeparator class="nav-separator" />

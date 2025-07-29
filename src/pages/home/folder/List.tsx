@@ -1,12 +1,22 @@
 import { HStack, VStack, Text } from "@hope-ui/solid"
-import { batch, createEffect, createSignal, For, Show } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Show,
+} from "solid-js"
 import { useT } from "~/hooks"
 import {
   allChecked,
   checkboxOpen,
+  countMsg,
   isIndeterminate,
+  local,
   objStore,
   selectAll,
+  selectedMsg,
   sortObjs,
 } from "~/store"
 import { OrderBy } from "~/store"
@@ -26,6 +36,7 @@ export const ListTitle = (props: {
       props.sortCallback(orderBy()!, reverse())
     }
   })
+
   const itemProps = (col: Col) => {
     return {
       fontWeight: "bold",
@@ -57,7 +68,11 @@ export const ListTitle = (props: {
             }}
           />
         </Show>
-        <Text {...itemProps(cols[0])}>{t(`home.obj.${cols[0].name}`)}</Text>
+        {selectedMsg() ? (
+          <Text {...itemProps(cols[0])}>{selectedMsg()}</Text>
+        ) : (
+          <Text {...itemProps(cols[0])}>{t(`home.obj.${cols[0].name}`)}</Text>
+        )}
       </HStack>
       <Text w={cols[1].w} {...itemProps(cols[1])}>
         {t(`home.obj.${cols[1].name}`)}
@@ -102,6 +117,11 @@ const ListLayout = () => {
           return <ListItem obj={obj} index={i()} />
         }}
       </For>
+      <Show when={local["show_count_msg"] === "visible"}>
+        <Text size="sm" color="$neutral11">
+          {countMsg()}
+        </Text>
+      </Show>
     </VStack>
   )
 }
