@@ -64,7 +64,7 @@ display_help() {
     echo "  --no-compress Skip compression"
     echo "  --enforce-tag Force git tag requirement for both dev and release builds"
     echo "  --skip-i18n   Skip i18n build step"
-    echo "  --lite        Add -lite suffix to frontend archive name"
+    echo "  --lite        Build lite version"
     echo ""
     echo "Environment variables:"
     echo "  OPENLIST_FRONTEND_BUILD_MODE=dev|release (default: dev)"
@@ -149,7 +149,11 @@ build_project() {
     fi
 
     log_step "==== Building project ===="
-    pnpm build
+    if [[ "$LITE_FLAG" == "true" ]]; then
+        pnpm build:lite
+    else
+        pnpm build
+    fi
 }
 
 # Fetch i18n files from release if skip-i18n flag is set

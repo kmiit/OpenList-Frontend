@@ -23,13 +23,13 @@ jobs:
           go-version: "1.24"
 
       - name: Checkout frontend codes
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Checkout backend codes
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ vars.SYNC_LANG_ENV_BACKEND_REPOSITORY || 'OpenListTeam/OpenList' }}
           ref: main
@@ -70,8 +70,8 @@ jobs:
       - name: Setup CI Bot
         if: steps.verify-changed-files.outputs.changed == 'true'
         run: |
-          git config --global user.name "The OpenList Bot"
-          git config --global user.email "bot@openlist.team"
+          git config --global user.name "${{ secrets.BOT_USERNAME }}"
+          git config --global user.email "${{ secrets.BOT_USEREMAIL }}"
 
       - name: Commit the changes
         if: steps.verify-changed-files.outputs.changed == 'true'
